@@ -34,15 +34,38 @@ class Program
         Console.WriteLine("╚════════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
+        if (string.IsNullOrEmpty(testSessionHandle))
+        {
+            Console.WriteLine("📋 testSessionHandle requis.");
+            Console.WriteLine("   (DevTools F12 → Network → findLastBattlesByTestSessionHandle → 1er paramètre du body)");
+            Console.WriteLine();
+            Console.Write("   Collez votre testSessionHandle: ");
+            testSessionHandle = Console.ReadLine()?.Trim() ?? "";
+            Console.WriteLine();
+
+            if (string.IsNullOrEmpty(testSessionHandle))
+            {
+                Console.WriteLine("❌ testSessionHandle obligatoire. Abandon.");
+                return;
+            }
+        }
+
         if (string.IsNullOrEmpty(cookie))
         {
             Console.WriteLine("🔑 Cookie d'authentification requis.");
             Console.WriteLine("   (DevTools F12 → Network → Clic sur une requête codingame → Headers → Cookie)");
+            Console.WriteLine("   Ressemble à: intercom-id-xxx=...; rememberMe=...; cgSession=...; AWSALB=...");
             Console.WriteLine("   Vous pouvez coller le cookie complet ou juste rememberMe=...");
             Console.WriteLine();
             Console.Write("   Collez votre cookie: ");
             cookie = Console.ReadLine()?.Trim();
             Console.WriteLine();
+
+            if (string.IsNullOrEmpty(cookie))
+            {
+                Console.WriteLine("❌ Cookie obligatoire pour récupérer les replays. Abandon.");
+                return;
+            }
         }
 
         Console.WriteLine("📋 Configuration:");

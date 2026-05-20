@@ -19,6 +19,7 @@ public class CodinGameExtractor
     private long _userId;
     private readonly string _outputDirectory;
     private readonly int _maxConcurrentRequests;
+    private readonly string? _cookie;
 
     public CodinGameExtractor(
         string testSessionHandle,
@@ -31,6 +32,7 @@ public class CodinGameExtractor
         _userId = userId;
         _outputDirectory = outputDirectory;
         _maxConcurrentRequests = maxConcurrentRequests;
+        _cookie = cookie;
 
         var cookieContainer = new System.Net.CookieContainer();
         var handler = new HttpClientHandler { CookieContainer = cookieContainer, UseCookies = true };
@@ -41,9 +43,16 @@ public class CodinGameExtractor
 
         if (!string.IsNullOrEmpty(cookie))
         {
+            var uri = new Uri("https://www.codingame.com");
             foreach (var part in cookie.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             {
-                cookieContainer.SetCookies(new Uri("https://www.codingame.com"), part);
+                var eqIndex = part.IndexOf('=');
+                if (eqIndex > 0)
+                {
+                    var name = part[..eqIndex].Trim();
+                    var value = part[(eqIndex + 1)..].Trim();
+                    cookieContainer.Add(uri, new System.Net.Cookie(name, value));
+                }
             }
         }
 
@@ -75,7 +84,24 @@ public class CodinGameExtractor
             if (ranking?.Codingamer != null && _userId == 0)
             {
                 _userId = ranking.Codingamer.UserId;
-                Console.WriteLine($"🔑 UserId auto-détecté: {_userId} ({ranking.Codingamer.Pseudo})\n");
+                Console.WriteLine($"🔑 UserId auto-détecté via ranking: {_userId} ({ranking.Codingamer.Pseudo})\n");
+            }
+
+            if (_userId == 0)
+            {
+                var loggedIn = await GetLoggedInUserAsync();
+                if (loggedIn != null)
+                {
+                    _userId = loggedIn.UserId;
+                    Console.WriteLine($"🔑 UserId auto-détecté via session: {_userId} ({loggedIn.Pseudo})\n");
+                }
+            }
+
+            if (_userId == 0)
+            {
+                _userId = ExtractUserIdFromCookie();
+                if (_userId != 0)
+                    Console.WriteLine($"🔑 UserId extrait du cookie rememberMe: {_userId}\n");
             }
 
             if (_userId == 0)
@@ -129,17 +155,78 @@ public class CodinGameExtractor
         }
     }
 
+    public async Task<GameCodingamer?> GetLoggedInUserAsync()
+    {
+        try
+        {
+            var url = $"{BaseUrl}/CodinGamer/getMyProperties";
+            var content = new StringContent("[]", System.Text.Encoding.UTF8, "application/json");
+
+            Console.WriteLine("🔍 Détection de l'utilisateur connecté...");
+            var response = await _httpClient.PostAsync(url, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"   ⚠️ Session invalide: {response.StatusCode}");
+                return null;
+            }
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseContent);
+            var root = doc.RootElement;
+
+            long userId = 0;
+            string? pseudo = null;
+
+            if (root.TryGetProperty("userId", out var uid))
+                userId = uid.GetInt64();
+            if (root.TryGetProperty("pseudo", out var p))
+                pseudo = p.GetString();
+
+            if (userId != 0)
+                return new GameCodingamer { UserId = userId, Pseudo = pseudo };
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"   ⚠️ Session: {ex.Message}");
+            return null;
+        }
+    }
+
+    private long ExtractUserIdFromCookie()
+    {
+        if (string.IsNullOrEmpty(_cookie))
+            return 0;
+
+        var match = Regex.Match(_cookie, @"rememberMe=([a-fA-F0-9]+)");
+        if (match.Success)
+        {
+            var value = match.Groups[1].Value;
+            // Format: {userId (digits)}{32-char hex token}
+            if (value.Length > 32)
+            {
+                var userIdPart = value[..^32];
+                if (long.TryParse(userIdPart, out var id))
+                    return id;
+            }
+        }
+
+        return 0;
+    }
+
     public async Task<List<long>> GetGameIdsFromTestSessionAsync()
     {
         try
         {
             var url = $"{BaseUrl}/gamesPlayersRanking/findLastBattlesByTestSessionHandle";
-            var json = JsonSerializer.Serialize(new object[] { _testSessionHandle, 10000 });
+            var json = JsonSerializer.Serialize(new object?[] { _testSessionHandle, null });
             var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
             Console.WriteLine("🔍 Récupération des battles...");
             Console.WriteLine($"   URL: {url}");
-            Console.WriteLine($"   Payload: [{_testSessionHandle[..8]}..., 10000]\n");
+            Console.WriteLine($"   Payload: [{_testSessionHandle[..Math.Min(8, _testSessionHandle.Length)]}..., null]\n");
 
             var response = await _httpClient.PostAsync(url, content);
             var responseContent = await response.Content.ReadAsStringAsync();
