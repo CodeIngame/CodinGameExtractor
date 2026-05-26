@@ -160,7 +160,7 @@ public class CodinGameExtractor
         try
         {
             var url = $"{BaseUrl}/CodinGamer/getMyProperties";
-            var content = new StringContent("[]", System.Text.Encoding.UTF8, "application/json");
+            var content = new StringContent("[null]", System.Text.Encoding.UTF8, "application/json");
 
             Console.WriteLine("🔍 Détection de l'utilisateur connecté...");
             var response = await _httpClient.PostAsync(url, content);
@@ -226,7 +226,7 @@ public class CodinGameExtractor
 
             Console.WriteLine("🔍 Récupération des battles...");
             Console.WriteLine($"   URL: {url}");
-            Console.WriteLine($"   Payload: [{_testSessionHandle[..Math.Min(8, _testSessionHandle.Length)]}..., null]\n");
+            Console.WriteLine($"   Payload: [{_testSessionHandle}..., null]\n");
 
             var response = await _httpClient.PostAsync(url, content);
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -299,6 +299,7 @@ public class CodinGameExtractor
         if (gameIds.Count == 0)
         {
             Console.WriteLine("⚠️  Aucune partie trouvée");
+            Console.WriteLine($"   testSessionHandle utilisé: {_testSessionHandle}");
             return [];
         }
 

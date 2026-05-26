@@ -1,6 +1,6 @@
 # CodinGame Log Extractor
 
-Outil pour extraire les logs de replays depuis l'API CodinGame.
+Outil pour extraire les logs de replays et jouer des parties via l'API CodinGame.
 
 ## Prérequis
 
@@ -8,6 +8,37 @@ Outil pour extraire les logs de replays depuis l'API CodinGame.
 - Un compte CodinGame
 
 ## Configuration
+
+### 🔑 Cookie d'authentification (obligatoire)
+
+Le cookie est nécessaire pour les deux modes. **Il est recommandé de le définir en variable d'environnement** pour éviter de le saisir à chaque exécution.
+
+#### Récupérer le cookie
+
+1. **DevTools** (F12) → onglet **Network**
+2. Cliquer sur n'importe quelle requête vers `codingame.com`
+3. Dans **Headers**, copier la valeur du header `Cookie`
+
+Le cookie ressemble à :
+```
+intercom-id-xxx=...; rememberMe=...; cgSession=...; AWSALB=...; AWSALBCORS=...
+```
+
+Vous pouvez utiliser le cookie **complet** ou juste `rememberMe=VOTRE_VALEUR`.
+
+#### Définir la variable d'environnement (recommandé)
+
+```powershell
+# Pour la session PowerShell courante
+$env:CODINGAME_COOKIE="rememberMe=VOTRE_VALEUR"
+```
+
+```powershell
+# Persistant (toutes les sessions)
+[System.Environment]::SetEnvironmentVariable("CODINGAME_COOKIE", "rememberMe=VOTRE_VALEUR", "User")
+```
+
+> Si le cookie n'est pas défini, le programme le demandera interactivement.
 
 ### Récupérer le `testSessionHandle`
 
@@ -17,59 +48,56 @@ Outil pour extraire les logs de replays depuis l'API CodinGame.
 4. Chercher l'appel à `findLastBattlesByTestSessionHandle`
 5. Copier le premier paramètre du body (c'est le `testSessionHandle`)
 
-## Utilisation
+Le `testSessionHandle` peut être hardcodé directement dans `Program.cs` pour éviter de le passer à chaque exécution.
+
+### Variables d'environnement
+
+| Variable | Description | Utilisé par |
+|----------|-------------|-------------|
+| `CODINGAME_COOKIE` | Cookie d'authentification CodinGame | Extract + Play |
+| `CODINGAME_OUTPUT` | Dossier de sortie | Extract + Play |
+| `CODINGAME_SESSION` | `testSessionHandle` par défaut | Play |
+
+---
+
+## Mode 1 : Extract (extraction des logs d'arena)
+
+Extrait les logs de toutes les parties d'une test session existante (arena battles).
+
+### Utilisation
 
 ```powershell
-dotnet run -- "<testSessionHandle>"
+# Lancement simple (utilise le testSessionHandle hardcodé dans Program.cs)
+dotnet run --project CodinGameExtractor
+
+# Avec un testSessionHandle spécifique
+dotnet run --project CodinGameExtractor -- "votre_test_session_handle"
 ```
 
-Le programme vous demandera de coller votre cookie d'authentification :
+### Arguments positionnels
 
 ```
-🔑 Cookie d'authentification requis.
-   (DevTools F12 → Network → Clic sur une requête codingame → Headers → Cookie)
-   Vous pouvez coller le cookie complet ou juste rememberMe=...
-
-   Collez votre cookie: 
-```
-
-Vous pouvez coller :
-- Le cookie **complet** : `cgSession=...; rememberMe=...; AWSALB=...; AWSALBCORS=...`
-- Ou juste `rememberMe=VOTRE_VALEUR`
-
-Pour récupérer le cookie complet :
-1. **DevTools** (F12) → onglet **Network**
-2. Cliquer sur n'importe quelle requête vers `codingame.com`
-3. Dans **Headers**, copier la valeur du header `Cookie`
-
-### Arguments optionnels
-
-```
-dotnet run -- <testSessionHandle> [userId] [outputDirectory] [maxConcurrentRequests]
+dotnet run --project CodinGameExtractor -- [testSessionHandle] [userId] [outputDirectory] [maxConcurrentRequests] [cookie]
 ```
 
 | # | Argument | Défaut | Description |
 |---|----------|--------|-------------|
-| 1 | `testSessionHandle` | *(hardcodé)* | Identifiant de la session de test |
-| 2 | `userId` | `3138357` | Votre userId CodinGame |
-| 3 | `outputDirectory` | `./codingame_logs` | Dossier de sortie |
+| 1 | `testSessionHandle` | *(hardcodé dans Program.cs)* | Identifiant de la session de test |
+| 2 | `userId` | `0` (auto-détecté) | Votre userId CodinGame |
+| 3 | `outputDirectory` | `CODINGAME_OUTPUT` ou `./codingame_logs` | Dossier de sortie |
 | 4 | `maxConcurrentRequests` | `5` | Requêtes parallèles max |
+| 5 | `cookie` | `CODINGAME_COOKIE` | Cookie d'authentification |
 
-> **Astuce** : vous pouvez définir `$env:CODINGAME_COOKIE` pour éviter le prompt à chaque exécution :
-> ```powershell
-> # Pour la session courante
-> $env:CODINGAME_COOKIE="cgSession=...; rememberMe=...; AWSALB=...; AWSALBCORS=..."
-> dotnet run -- "<testSessionHandle>"
-> ```
->
-> Pour la rendre persistante (permanent pour l'utilisateur) :
-> ```powershell
-> [System.Environment]::SetEnvironmentVariable("CODINGAME_COOKIE", "cgSession=...; rememberMe=...; AWSALB=...; AWSALBCORS=...", "User")
-> ```
+> **Note** : passer une chaîne vide `""` pour un argument positionnel l'ignore et conserve la valeur par défaut.
 
-## Sortie
+### Détection automatique du userId
 
-Les logs sont sauvegardés par résultat (win/loss), puis par tranche de rank adverse. Un fichier `summary.md` est généré à la racine avec les statistiques globales.
+Le programme tente de détecter votre userId dans l'ordre suivant :
+1. Via l'API ranking (si disponible)
+2. Via l'API session (`CodinGamer/getMyProperties`) avec le cookie
+3. Extraction depuis le cookie `rememberMe`
+
+### Sortie (Extract)
 
 ```
 codingame_logs/
@@ -77,18 +105,65 @@ codingame_logs/
   win/
     0001-0100/
       WIN_0042_Boriza_seed=373368691909388100_gameId=876334184.txt
-      WIN_0087_PlayerX_seed=...txt
     0101-0200/
       WIN_0150_SomeBot_seed=...txt
   loss/
     0001-0100/
       LOSS_0023_TopPlayer_seed=...txt
-    0201-0300/
-      LOSS_0250_OtherBot_seed=...txt
     timeout/
       0001-0100/
         TIMEOUT_0015_FastBot_seed=...txt
 ```
+
+---
+
+## Mode 2 : Play (jouer des parties)
+
+Lance X parties contre le boss ou un joueur spécifique via l'API CodinGame, en utilisant votre code source local.
+
+### Utilisation
+
+```powershell
+# Jouer 10 parties contre le boss
+dotnet run --project CodinGameExtractor -- play mon_bot.cs 10
+
+# Jouer 5 parties contre un joueur spécifique
+dotnet run --project CodinGameExtractor -- play mon_bot.cs 5 --player 1234567
+
+# Avec un seed manuel
+dotnet run --project CodinGameExtractor -- play mon_bot.cs 1 --seed 42
+
+# Avec un testSessionHandle spécifique
+dotnet run --project CodinGameExtractor -- play mon_bot.cs 10 --session "votre_handle"
+```
+
+### Syntaxe
+
+```
+dotnet run --project CodinGameExtractor -- play <codeFile> [numberOfGames] [options]
+```
+
+### Arguments et options
+
+| Argument / Option | Défaut | Description |
+|-------------------|--------|-------------|
+| `<codeFile>` | *(obligatoire)* | Chemin vers le fichier source de votre bot |
+| `[numberOfGames]` | `1` | Nombre de parties à jouer |
+| `--boss` | *(défaut)* | Jouer contre le boss |
+| `--player <id>` | — | Jouer contre un joueur spécifique (userId) |
+| `--seed <seed>` | *(auto)* | Seed manuel (sinon généré automatiquement) |
+| `--session <handle>` | `CODINGAME_SESSION` | `testSessionHandle` à utiliser |
+| `--output <dir>` | `CODINGAME_OUTPUT` ou `./codingame_play_logs` | Dossier de sortie |
+| `--lang <id>` | `C#` | Identifiant du langage de programmation |
+| `--cookie <cookie>` | `CODINGAME_COOKIE` | Cookie d'authentification |
+
+### Sortie (Play)
+
+Les résultats sont organisés par win/loss dans le dossier de sortie, avec un `summary.md` récapitulatif.
+
+---
+
+## Format des fichiers logs
 
 ### Noms de fichiers
 
