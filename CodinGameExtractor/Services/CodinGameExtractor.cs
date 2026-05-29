@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using CodinGameLogExtractor.Models;
+using CodinGameLogExtractor.Models.Api;
 
 namespace CodinGameLogExtractor.Services;
 

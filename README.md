@@ -6,12 +6,32 @@ Outil pour extraire les logs de replays et jouer des parties via l'API CodinGame
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - Un compte CodinGame
+- Package NuGet : [CommandLineParser](https://github.com/commandlineparser/commandline)
 
 ## Configuration
 
-### 🔑 Cookie d'authentification (obligatoire)
+### 🔑 Variables d'environnement (obligatoires)
 
-Le cookie est nécessaire pour les deux modes. **Il est recommandé de le définir en variable d'environnement** pour éviter de le saisir à chaque exécution.
+Les deux variables suivantes doivent être définies **avant** de lancer l'outil :
+
+| Variable | Description | Utilisé par |
+|----------|-------------|-------------|
+| `CODINGAME_COOKIE` | Cookie d'authentification CodinGame | Extract + Play |
+| `CODINGAME_SESSION` | `testSessionHandle` de la session de test | Extract + Play |
+
+#### Définir les variables d'environnement
+
+```powershell
+# Pour la session PowerShell courante
+$env:CODINGAME_COOKIE="rememberMe=VOTRE_VALEUR"
+$env:CODINGAME_SESSION="votre_test_session_handle"
+```
+
+```powershell
+# Persistant (toutes les sessions)
+[System.Environment]::SetEnvironmentVariable("CODINGAME_COOKIE", "rememberMe=VOTRE_VALEUR", "User")
+[System.Environment]::SetEnvironmentVariable("CODINGAME_SESSION", "votre_test_session_handle", "User")
+```
 
 #### Récupérer le cookie
 
@@ -26,21 +46,7 @@ intercom-id-xxx=...; rememberMe=...; cgSession=...; AWSALB=...; AWSALBCORS=...
 
 Vous pouvez utiliser le cookie **complet** ou juste `rememberMe=VOTRE_VALEUR`.
 
-#### Définir la variable d'environnement (recommandé)
-
-```powershell
-# Pour la session PowerShell courante
-$env:CODINGAME_COOKIE="rememberMe=VOTRE_VALEUR"
-```
-
-```powershell
-# Persistant (toutes les sessions)
-[System.Environment]::SetEnvironmentVariable("CODINGAME_COOKIE", "rememberMe=VOTRE_VALEUR", "User")
-```
-
-> Si le cookie n'est pas défini, le programme le demandera interactivement.
-
-### Récupérer le `testSessionHandle`
+#### Récupérer le `testSessionHandle`
 
 1. Ouvrir le challenge sur CodinGame (ex: `https://www.codingame.com/ide/challenge/...`)
 2. Lancer un batch de parties (test session)
@@ -48,47 +54,41 @@ $env:CODINGAME_COOKIE="rememberMe=VOTRE_VALEUR"
 4. Chercher l'appel à `findLastBattlesByTestSessionHandle`
 5. Copier le premier paramètre du body (c'est le `testSessionHandle`)
 
-Le `testSessionHandle` peut être hardcodé directement dans `Program.cs` pour éviter de le passer à chaque exécution.
+---
 
-### Variables d'environnement
+## Commandes
 
-| Variable | Description | Utilisé par |
-|----------|-------------|-------------|
-| `CODINGAME_COOKIE` | Cookie d'authentification CodinGame | Extract + Play |
-| `CODINGAME_OUTPUT` | Dossier de sortie | Extract + Play |
-| `CODINGAME_SESSION` | `testSessionHandle` par défaut | Play |
+L'outil utilise [CommandLineParser](https://github.com/commandlineparser/commandline) avec 2 verbes :
+
+```
+dotnet run --project CodinGameExtractor -- extract [options]
+dotnet run --project CodinGameExtractor -- play <codeFile> [options]
+dotnet run --project CodinGameExtractor -- --help
+```
 
 ---
 
-## Mode 1 : Extract (extraction des logs d'arena)
+## Mode 1 : `extract` (extraction des logs d'arena)
 
 Extrait les logs de toutes les parties d'une test session existante (arena battles).
 
 ### Utilisation
 
 ```powershell
-# Lancement simple (utilise le testSessionHandle hardcodé dans Program.cs)
-dotnet run --project CodinGameExtractor
+# Lancement simple
+dotnet run --project CodinGameExtractor -- extract
 
-# Avec un testSessionHandle spécifique
-dotnet run --project CodinGameExtractor -- "votre_test_session_handle"
+# Avec options
+dotnet run --project CodinGameExtractor -- extract -o ./mes_logs -c 10 --user 1234567
 ```
 
-### Arguments positionnels
+### Options
 
-```
-dotnet run --project CodinGameExtractor -- [testSessionHandle] [userId] [outputDirectory] [maxConcurrentRequests] [cookie]
-```
-
-| # | Argument | Défaut | Description |
-|---|----------|--------|-------------|
-| 1 | `testSessionHandle` | *(hardcodé dans Program.cs)* | Identifiant de la session de test |
-| 2 | `userId` | `0` (auto-détecté) | Votre userId CodinGame |
-| 3 | `outputDirectory` | `CODINGAME_OUTPUT` ou `./codingame_logs` | Dossier de sortie |
-| 4 | `maxConcurrentRequests` | `5` | Requêtes parallèles max |
-| 5 | `cookie` | `CODINGAME_COOKIE` | Cookie d'authentification |
-
-> **Note** : passer une chaîne vide `""` pour un argument positionnel l'ignore et conserve la valeur par défaut.
+| Option | Court | Défaut | Description |
+|--------|-------|--------|-------------|
+| `--user <id>` | `-u` | `0` (auto-détecté) | Votre userId CodinGame |
+| `--output <dir>` | `-o` | `./codingame_logs` | Dossier de sortie |
+| `--concurrency <n>` | `-c` | `5` | Nombre de requêtes parallèles max |
 
 ### Détection automatique du userId
 
@@ -117,45 +117,74 @@ codingame_logs/
 
 ---
 
-## Mode 2 : Play (jouer des parties)
+## Mode 2 : `play` (jouer des parties)
 
 Lance X parties contre le boss ou un joueur spécifique via l'API CodinGame, en utilisant votre code source local.
 
 ### Utilisation
 
 ```powershell
-# Jouer 10 parties contre le boss
-dotnet run --project CodinGameExtractor -- play mon_bot.cs 10
+# Jouer 10 parties contre le boss (langage auto-détecté via l'extension)
+dotnet run --project CodinGameExtractor -- play mon_bot.cs -n 10
 
 # Jouer 5 parties contre un joueur spécifique
-dotnet run --project CodinGameExtractor -- play mon_bot.cs 5 --player 1234567
+dotnet run --project CodinGameExtractor -- play mon_bot.cs -n 5 --player 1234567
 
 # Avec un seed manuel
-dotnet run --project CodinGameExtractor -- play mon_bot.cs 1 --seed 42
+dotnet run --project CodinGameExtractor -- play mon_bot.cs -n 1 --seed 42
 
-# Avec un testSessionHandle spécifique
-dotnet run --project CodinGameExtractor -- play mon_bot.cs 10 --session "votre_handle"
-```
+# Code Python (langage auto-détecté → Python3)
+dotnet run --project CodinGameExtractor -- play mon_bot.py -n 20 --boss
 
-### Syntaxe
-
-```
-dotnet run --project CodinGameExtractor -- play <codeFile> [numberOfGames] [options]
+# Forcer un langage spécifique
+dotnet run --project CodinGameExtractor -- play mon_bot.cs --lang Java
 ```
 
 ### Arguments et options
 
-| Argument / Option | Défaut | Description |
-|-------------------|--------|-------------|
-| `<codeFile>` | *(obligatoire)* | Chemin vers le fichier source de votre bot |
-| `[numberOfGames]` | `1` | Nombre de parties à jouer |
-| `--boss` | *(défaut)* | Jouer contre le boss |
-| `--player <id>` | — | Jouer contre un joueur spécifique (userId) |
-| `--seed <seed>` | *(auto)* | Seed manuel (sinon généré automatiquement) |
-| `--session <handle>` | `CODINGAME_SESSION` | `testSessionHandle` à utiliser |
-| `--output <dir>` | `CODINGAME_OUTPUT` ou `./codingame_play_logs` | Dossier de sortie |
-| `--lang <id>` | `C#` | Identifiant du langage de programmation |
-| `--cookie <cookie>` | `CODINGAME_COOKIE` | Cookie d'authentification |
+| Argument / Option | Court | Défaut | Description |
+|-------------------|-------|--------|-------------|
+| `<codeFile>` | | *(obligatoire)* | Chemin vers le fichier source de votre bot |
+| `--games <n>` | `-n` | `10` | Nombre de parties à jouer |
+| `--boss` | | *(défaut)* | Jouer contre le boss |
+| `--player <id>` | | — | Jouer contre un joueur spécifique (userId) |
+| `--seed <seed>` | `-s` | *(auto)* | Seed manuel (sinon généré automatiquement) |
+| `--output <dir>` | `-o` | `./codingame_play_logs` | Dossier de sortie |
+| `--lang <id>` | `-l` | *(auto-détecté)* | Identifiant du langage de programmation |
+
+### Auto-détection du langage
+
+Le langage est automatiquement déterminé via l'extension du fichier de code :
+
+| Extension | Langage |
+|-----------|---------|
+| `.cs` | C# |
+| `.java` | Java |
+| `.py` | Python3 |
+| `.js` | Javascript |
+| `.ts` | Typescript |
+| `.cpp`, `.cc`, `.cxx` | C++ |
+| `.c` | C |
+| `.rs` | Rust |
+| `.go` | Go |
+| `.rb` | Ruby |
+| `.kt`, `.kts` | Kotlin |
+| `.scala` | Scala |
+| `.swift` | Swift |
+| `.php` | PHP |
+| `.hs` | Haskell |
+| `.d` | D |
+| `.dart` | Dart |
+| `.lua` | Lua |
+| `.bash`, `.sh` | Bash |
+| `.fs` | F# |
+| `.vb` | VB.NET |
+| `.groovy` | Groovy |
+| `.pas` | Pascal |
+| `.m` | Objective-C |
+| `.pl` | Perl |
+
+L'option `--lang` permet de forcer un langage si l'auto-détection ne convient pas.
 
 ### Sortie (Play)
 

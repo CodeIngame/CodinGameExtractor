@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace CodinGameLogExtractor.Models;
+namespace CodinGameLogExtractor.Models.Api;
 
 public class GameResult
 {
